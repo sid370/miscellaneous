@@ -44,12 +44,15 @@ const upload = multer({
             return cb(new Error("Only audio files supported"))
         }
     }
-})
+}).single('file')
 
-app.post("/upload", upload.single("file"), (req, res) => {
-    res.status(200).json({
-        status: "file uploaded",
-        note: "if mimetype is not supported, your upload will be automatically rejected"
+app.post("/upload", (req, res) => {
+    upload(req, res, err => {
+        if (err) return res.status(500).json({err})
+        res.status(200).json({
+            status: "file uploaded",
+            note: "if mimetype is not supported, your upload will be automatically rejected"
+        })
     })
 })
 
