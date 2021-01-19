@@ -5,4 +5,4 @@ const dataSchema = mongoose.Schema({
     name: { type: String }
 })
 
-module.exports = mongoose.model('crud', dataSchema)
+module.exports = mongoose.model('songdb', dataSchema)

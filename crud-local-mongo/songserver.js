@@ -6,6 +6,7 @@ const GridFsStorage = require("multer-gridfs-storage")
 const Grid = require("gridfs-stream")
 const mongoose = require("mongoose")
 const bodyParser = require("body-parser")
+const songdb = require("./Models/songdb")
 
 app.use(morgan('dev'))
 app.use(bodyParser.json())
@@ -14,8 +15,13 @@ const MongoURI = 'mongodb://127.0.0.1:27017/songLibrary'
 
 const conn = mongoose.createConnection(MongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
 
-let gfs, fname;
+let gfs, id, songname;
 conn.once('open', () => {
+    conn.db.listCollections().toArray((err, names) => {
+        err ? console.log(err) : null
+        var x = names.find(item => item.name === "simplifiedDb")
+        x ? null : conn.createCollection("simplifiedDb")
+    })
     gfs = Grid(conn.db, mongoose.mongo)
     gfs.collection('fs')
 })
@@ -23,15 +29,13 @@ conn.once('open', () => {
 const storage = new GridFsStorage({
     url: MongoURI,
     file: (req, file) => {
-        fname = file
-        return new Promise((resolve, reject) => {
-            filename = file.originalname
-            const fileinfo = {
-                filename,
-                bucketname: 'fs'
-            }
-            resolve(fileinfo)
-        })
+        id = mongoose.Types.ObjectId()
+        songname = file.originalname
+        return {
+            bucketname: 'fs',
+            filename: songname,
+            id: id
+        }
     }
 })
 
@@ -48,12 +52,19 @@ const upload = multer({
 
 app.post("/upload", (req, res) => {
     upload(req, res, err => {
-        if (err) return res.status(500).json({err})
+        if (err) return res.status(500).json({ err })
+        const song = {
+            _id: id,
+            name: songname,
+            genre: req.body.genre
+        }
+        conn.collection('simplifiedDb').insertOne(song)
         res.status(200).json({
             status: "file uploaded",
             note: "if mimetype is not supported, your upload will be automatically rejected"
         })
     })
+
 })
 
 app.get("/", (req, res) => {
@@ -63,7 +74,7 @@ app.get("/", (req, res) => {
                 err: 'No files exist'
             });
         }
-        return res.json(files)
+        return res.status(200).json(files)
     })
 })
 
@@ -82,7 +93,12 @@ app.get("/:id", (req, res) => {
             fileId = fileId.toString()
             if (fileId === id) {
                 console.log("Match found")
-                res.status(200).json(files[i])
+                const fileInfo = files[i]
+                conn.collection("simplifiedDb").findOne({ name: files[i].filename }, (err, data) => {
+                    if (err) console.log(err)
+                    res.status(200).json({ file: fileInfo, data })
+                })
+                
             }
         }
     })
@@ -123,11 +139,19 @@ app.delete('/:id', (req, res) => {
             var fileId = files[i]._id
             fileId = fileId.toString()
             if (fileId === id) {
-                gfs.remove({ filename: files[i].filename }, (err) => {
+                const fname = files[i].filename
+                gfs.remove({ filename: fname }, (err) => {
                     err ? res.status(500).json(err) : null
-                    res.status(200).json({
-                        message: "file deleted"
+                    conn.collection('simplifiedDb').deleteOne({ name: fname }, (err, ques) => {
+                        if (err) return res.status(500).json({
+                            message: "file not deleted from simplified db",
+                            err
+                        })
+                        res.status(200).json({
+                            message: "file deleted"
+                        })
                     })
+
                 })
             }
         }
